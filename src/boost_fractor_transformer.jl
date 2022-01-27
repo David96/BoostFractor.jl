@@ -34,7 +34,7 @@ mutable struct Modes
     mode_patterns::Array{Complex{Float64}, 5}
     mode_kt::Array{Complex{Float64}, 2}
     id::Array{Complex{Float64}, 2}
-    zeromatrix::Array{Complex{Float64}, 2}
+    zeromatrix::Array{Complex{Real}, 2}
 end
 
 """
@@ -171,8 +171,8 @@ end
 #TODO: tilts, eps and surface should come from SetupBoundaries object?
 """
 """
-function propagation_matrix(dz, diskR, eps, tilt_x, tilt_y, surface, lambda, coords::CoordinateSystem, modes::Modes; is_air=(real(eps)==1), onlydiagonal=false, prop=propagator)
-    matching_matrix = Array{Complex{Float64}}(zeros(modes.M*(2modes.L+1),modes.M*(2modes.L+1)))
+function propagation_matrix(dz, diskR, eps::Complex{T}, tilt_x, tilt_y, surface, lambda, coords::CoordinateSystem, modes::Modes; is_air=(real(eps)==1), onlydiagonal=false, prop=propagator) where T<:Real
+    matching_matrix = Array{Complex{T}}(zeros(modes.M*(2modes.L+1),modes.M*(2modes.L+1)))
 
     k0 = 2pi/lambda*sqrt(eps)
 
@@ -210,7 +210,7 @@ function propagation_matrix(dz, diskR, eps, tilt_x, tilt_y, surface, lambda, coo
     end
 
     if !is_air
-        propagation_matrix = Array{Complex{Float64}}(zeros(modes.M*(2modes.L+1),modes.M*(2modes.L+1)))
+        propagation_matrix = Array{Complex{T}}(zeros(modes.M*(2modes.L+1), modes.M*(2modes.L+1)))
         #The propagation within the disk is still missing
         for m in 1:modes.M, l in -modes.L:modes.L
             kz = sqrt(k0^2 - modes.mode_kt[m,l+modes.L+1]^2)
@@ -235,16 +235,17 @@ end
 """
 Calculate Transfer matrix like in 4.9.
 """
-function get_boundary_matrix(n_left, n_right, diffprop::Array{Complex{T}}, modes::Modes) where T<:Real
+function get_boundary_matrix(n_left::Complex{<:Real}, n_right::Complex{<:Real}, diffprop::Array{Complex{T}}, modes::Modes) where T<:Real
     # We calculate G_r P_r analogous to eqs. 4.7
     # where n_right = n_{r+1}, n_left = n_r
 
     # The matrix encoding reflection and transmission (Knirck 6.18)
-    G = (( (1. /(2*n_right)).*[(n_right+n_left)*modes.id (n_right-n_left)*modes.id ; (n_right-n_left)*modes.id (n_right+n_left)*modes.id] ))
+    G = Array{Complex{T}}(( (1. /(2*n_right)).*[(n_right+n_left)*modes.id (n_right-n_left)*modes.id ; (n_right-n_left)*modes.id (n_right+n_left)*modes.id] ))
 
 
     # The product, i.e. transfer matrix
-    return G * [diffprop modes.zeromatrix; modes.zeromatrix inv(Array{Complex{T}}(diffprop))]
+    inv_diffprop = 1 / diffprop[1]
+    return G * [diffprop modes.zeromatrix; modes.zeromatrix inv_diffprop]
     # Note: we build up the system from the end (Lm) downwards until L0
     # so this makes a transfer matrix from interface n -> m to a function that goes from interface n-1 ->m
     # This is convenient, because using this iteratively one arrives at exactly the T_n^m matrix from
@@ -282,7 +283,9 @@ end
 """
 Transformer Algorithm using Transfer Matrices and Modes to do the 3D Calculation.
 """
-function transformer(bdry::SetupBoundaries, coords::CoordinateSystem, modes::Modes; f=10.0e9, velocity_x=0, prop=propagator, propagation_matrices::Array{Array{Complex{T},2},1}=Array{Complex{Float64},2}[], diskR=0.15, emit=axion_induced_modes(coords,modes;B=nothing,velocity_x=velocity_x,diskR=diskR,f=f), reflect=nothing) where T<:Real
+function transformer(bdry::SetupBoundaries, coords::CoordinateSystem, modes::Modes; f=10.0e9,
+        velocity_x=0, prop=propagator, propagation_matrices::Array{Array{Complex{T},2},1}=Array{Complex{Float64},2}[],
+        diskR=0.15, emit=axion_induced_modes(coords,modes;B=nothing,velocity_x=velocity_x,diskR=diskR,f=f), reflect=nothing) where T<:Real
     # For the transformer the region of the mirror must contain a high dielectric constant,
     # as the mirror is not explicitly taken into account
     # To have same SetupBoundaries object for all codes and cheerleader assumes NaN, just define a high constant
@@ -337,7 +340,8 @@ function transformer(bdry::SetupBoundaries, coords::CoordinateSystem, modes::Mod
                         propagation_matrices[idx_reg(s)])
 
         # T_s^m = T_{s+1}^m G_s P_s
-        transmissionfunction_complete *= get_boundary_matrix(sqrt(bdry.eps[idx_reg(s)]), sqrt(bdry.eps[idx_reg(s+1)]), diffprop, modes)
+        transmissionfunction_complete *= get_boundary_matrix(sqrt(bdry.eps[idx_reg(s)]),
+                                                             sqrt(bdry.eps[idx_reg(s+1)]), diffprop, modes)
     end
     #println(axion_beam)
     #println(transmissionfunction_complete[index(modes,2),index(modes,2)])

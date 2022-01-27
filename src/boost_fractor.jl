@@ -60,10 +60,10 @@ Define properties of dielectric boundaries. Coordinate system?
 - `relative_tilt_y` ```> 0```: Tilt in y direction [rad?]
 - `relative_surfaces::Array{Complex{Float64},3}` ```?```: Surface roughness. z offset (1st dim) at x,y (2nd, 3rd dims)
 """
-mutable struct SetupBoundaries
-    distance::Array{Float64,1} # = [15e-3, 5e-3,0]
-    r::Array{Complex{Float64},1}   # = [1,-0.5,0.5,0]
-    eps::Array{Complex{Float64},1}   # = [1,9,1]
+mutable struct SetupBoundaries{T<:Real}
+    distance::Array{T,1} # = [15e-3, 5e-3,0]
+    r::Array{Complex{T},1} # = [1,-0.5,0.5,0]
+    eps::Array{Complex{T},1} # = [1,9,1]
     relative_tilt_x # = [0,0]
     relative_tilt_y # = [0,0]
     relative_surfaces::Array{Complex{Float64},3} # = [z, x,y ]
@@ -80,7 +80,9 @@ Initialize `mutable struct SetupBoundaries` with sensible values.
 # Arguments
 - `diskno::Int` ```> 0```: Number of dielectric discs
 """
-function SeedSetupBoundaries(coords::CoordinateSystem; diskno=3, distance=nothing, epsilon=nothing, relative_tilt_x=zeros(2*diskno+2), relative_tilt_y=zeros(2*diskno+2), relative_surfaces=zeros(2*diskno+2 , length(coords.X), length(coords.Y)))
+function SeedSetupBoundaries(coords::CoordinateSystem; diskno=3, distance=nothing, epsilon::Array{Complex{T}}=nothing,
+        relative_tilt_x=zeros(2*diskno+2), relative_tilt_y=zeros(2*diskno+2),
+        relative_surfaces::Array{Complex{Float64},3}=zeros(ComplexF64, 2*diskno+2, length(coords.X), length(coords.Y))) where T<:Real
 
     # Initialize SetupBoundaries entries with default values given diskno. Rest was already defined in function definition.
     if distance === nothing # [m]
@@ -94,17 +96,17 @@ function SeedSetupBoundaries(coords::CoordinateSystem; diskno=3, distance=nothin
         append!(epsilon, [ x % 2 == 1.0 ? 1.0 : 9.0 for x in 1:2*(diskno) ])
         append!(epsilon, 1.0)
     end
-    epsilon = Array{Complex{Float64}}(epsilon)
+    epsilon = Array{Complex{T}}(epsilon)
     epsilon[imag.(epsilon) .== 0.0] .= real.(epsilon[imag.(epsilon) .== 0.0]) .- 0.0im#Make sure that a real epsilon is casted to Re(eps)-0.0im.
-    
-    reflectivities = complex([1.0])
+
     R = [(sqrt(epsilon[i-1]) - sqrt(epsilon[i])) / (sqrt(epsilon[i-1]) + sqrt(epsilon[i])) for i in 3:length(epsilon)]
-    append!(reflectivities, R)
+    reflectivities = vcat(complex(1.0), R)
 
     # Check if initialization was self-consistent
     length(distance) == length(reflectivities)+1 == length(epsilon) == length(relative_tilt_x) == length(relative_tilt_y) == size(relative_surfaces, 1) || throw(DimensionMismatch("the arrays in your SetupBoundaries objects don't fit together!"))
 
-    return SetupBoundaries(distance, Array{Complex{Float64}}(reflectivities), epsilon, relative_tilt_x, relative_tilt_y, relative_surfaces)
+    return SetupBoundaries{T}(distance, reflectivities, epsilon, relative_tilt_x, relative_tilt_y,
+                           relative_surfaces)
 end
 
 
