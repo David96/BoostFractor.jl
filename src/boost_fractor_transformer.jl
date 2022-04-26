@@ -244,7 +244,11 @@ function get_boundary_matrix(n_left::Complex{<:Real}, n_right::Complex{<:Real}, 
 
 
     # The product, i.e. transfer matrix
-    inv_diffprop = 1 / diffprop[1]
+    if length(diffprop) == 1
+        inv_diffprop = 1 / diffprop[1]
+    else
+        inv_diffprop = inv(diffprop)
+    end
     return G * [diffprop modes.zeromatrix; modes.zeromatrix inv_diffprop]
     # Note: we build up the system from the end (Lm) downwards until L0
     # so this makes a transfer matrix from interface n -> m to a function that goes from interface n-1 ->m
